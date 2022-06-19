@@ -12,16 +12,35 @@ File URL :https://docs.google.com/spreadsheets/d/1IFwK4BEbsUcM1komvOpL0odjopDjy1
 
 (SourceTable as table,ColumnList as list) as table=>
 let
+    // Source = Excel.CurrentWorkbook(){[Name="Table1"]}[Content],
+    // ColumnList={"Name","Age","Gender","Country"},
     Source = SourceTable,
-    #"Added Index" = Table.AddIndexColumn(Source, "Index", 0, 1),
+    ColumnHeader = Table.ColumnNames(Source){0},
+    #"Added Index" = Table.AddIndexColumn(Source, "Index", 0, 1, Int64.Type),
     #"Added Custom" = Table.AddColumn(#"Added Index", "Custom", each Number.Mod([Index],List.Count(ColumnList))),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"Index"}),
     #"Grouped Rows" = Table.Group(#"Removed Columns", {"Custom"}, {{"Count", each _, type table [Source Data=any, Custom=number]}}),
     Custom1 = Table.TransformColumns( #"Grouped Rows",{"Custom",each ColumnList{_}}),
     #"Added Custom1" = Table.AddColumn(Custom1, "Custom.1", each Table.AddIndexColumn([Count],"Serial No",1,1)),
     #"Removed Columns1" = Table.RemoveColumns(#"Added Custom1",{"Count"}),
-    #"Expanded Custom.1" = Table.ExpandTableColumn(#"Removed Columns1", "Custom.1", {"Source Data", "Serial No"}, {"Source Data", "Serial No"}),
-    #"Pivoted Column" = Table.Pivot(Table.TransformColumnTypes(#"Expanded Custom.1", {{"Custom", type text}}, "en-US"), List.Distinct(Table.TransformColumnTypes(#"Expanded Custom.1", {{"Custom", type text}}, "en-US")[Custom]), "Custom", "Source Data"),
+    #"Expanded Custom.1" = Table.ExpandTableColumn(#"Removed Columns1", "Custom.1", {ColumnHeader, "Serial No"}, {ColumnHeader, "Serial No"}),
+    #"Pivoted Column" = Table.Pivot(Table.TransformColumnTypes(#"Expanded Custom.1", {{"Custom", type text}}, "en-US"), List.Distinct(Table.TransformColumnTypes(#"Expanded Custom.1", {{"Custom", type text}}, "en-US")[Custom]), "Custom", ColumnHeader),
     #"Removed Columns2" = Table.RemoveColumns(#"Pivoted Column",{"Serial No"})
 in
     #"Removed Columns2"
+
+
+
+Another Approach using List.Split and Table.FromRows
+
+(SourceTable as table,ColumnList as list) as table=>
+let
+    // Source = Excel.CurrentWorkbook(){[Name="Table1"]}[Content],
+    // ColumnList = {"Name","Age","Gender","Country"},
+    Source = SourceTable,
+    ColumnHeader = Table.ColumnNames( Source){0},
+    ColumnDataAsList = Table.Column(Source, ColumnHeader),
+    GroupEachRowData = List.Split( ColumnDataAsList,List.Count(ColumnList)),
+    ConvertToTable = Table.FromRows(GroupEachRowData,ColumnList)
+in
+    ConvertToTable
